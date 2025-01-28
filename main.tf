@@ -53,6 +53,7 @@ resource "aws_subnet" "public_a" {
   }
 }
 
+
 resource "aws_subnet" "public_b" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.2.0/24"
@@ -254,7 +255,7 @@ resource "aws_route_table_association" "private_b" {
 resource "aws_security_group" "bastion_sg" {
   name        = "BastionHostSG"
   description = "Security group for Bastion Host"
-  vpc_id      = var.vpc_id
+  vpc_id      = aws_vpc.main.id # <-- Modification ici
 
   ingress {
     from_port   = 22
@@ -274,6 +275,7 @@ resource "aws_security_group" "bastion_sg" {
     Name = "BastionSecurityGroup"
   }
 }
+
 resource "aws_iam_account_password_policy" "password_policy" {
   minimum_password_length        = 14
   require_uppercase_characters   = true
@@ -287,7 +289,7 @@ resource "aws_iam_account_password_policy" "password_policy" {
 resource "aws_instance" "bastion" {
   ami                         = var.ami_id
   instance_type               = "t2.micro"
-  subnet_id                   = var.public_subnet_1
+  subnet_id                   = aws_subnet.public_a.id # <-- Correction ici
   vpc_security_group_ids      = [aws_security_group.bastion_sg.id]
   associate_public_ip_address = true
   key_name                    = var.key_name
@@ -305,6 +307,8 @@ resource "aws_instance" "bastion" {
   tags = {
     Name = "BastionHost"
   }
+
+  depends_on = [aws_vpc.main, aws_subnet.public_a] # <-- Ajout de dépendances pour éviter l'erreur
 }
 
 # IAM Role pour activer le SSM Agent
@@ -358,7 +362,7 @@ resource "aws_iam_role" "ec2_s3_role" {
   })
 }
 
-# IAM Role pour SSM et S3
+
 # IAM Role pour SSM et S3
 resource "aws_iam_role" "ec2_ssm_s3_role" {
   name = "ec2-ssm-s3-role"
@@ -1328,6 +1332,8 @@ resource "aws_s3_bucket_notification" "cloudtrail_logs_notification" {
     lambda_function_arn = aws_lambda_function.ingest_logs.arn
     events              = ["s3:ObjectCreated:*"]
   }
+
+  depends_on = [aws_lambda_function.ingest_logs] # <-- Ajout de la dépendance
 }
 
 # 7. Créer un groupe de logs dans CloudWatch Logs
