@@ -1571,3 +1571,76 @@ resource "aws_cloudtrail" "main" {
     Name = "CloudTrailMain"
   }
 }
+# Groupe de logs CloudWatch pour VPC Flow Logs
+resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
+  name              = "/aws/vpc/flow-logs"
+  retention_in_days = 30 # Conserve les logs pendant 30 jours
+
+  tags = {
+    Name = "VPC-Flow-Logs"
+  }
+}
+
+# IAM Role pour VPC Flow Logs
+resource "aws_iam_role" "vpc_flow_logs_role" {
+  name = "vpc-flow-logs-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          Service = "vpc-flow-logs.amazonaws.com"
+        },
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "VPC-Flow-Logs-Role"
+  }
+}
+
+# Attacher une politique pour autoriser les logs VPC à être envoyés vers CloudWatch Logs
+resource "aws_iam_policy" "vpc_flow_logs_policy" {
+  name        = "VPCFlowLogsPolicy"
+  description = "Policy for VPC Flow Logs to write to CloudWatch"
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams"
+        ],
+        Resource = aws_cloudwatch_log_group.vpc_flow_logs.arn
+      }
+    ]
+  })
+}
+
+# Attachement de la policy au rôle IAM
+resource "aws_iam_role_policy_attachment" "vpc_flow_logs_role_attachment" {
+  role       = aws_iam_role.vpc_flow_logs_role.name
+  policy_arn = aws_iam_policy.vpc_flow_logs_policy.arn
+}
+
+# VPC Flow Log attaché au VPC
+resource "aws_flow_log" "vpc_flow_logs" {
+  vpc_id               = aws_vpc.main.id
+  traffic_type         = "ALL" # Capture du trafic entrant et sortant
+  log_destination_type = "cloud-watch-logs"
+  log_destination      = aws_cloudwatch_log_group.vpc_flow_logs.arn
+  iam_role_arn         = aws_iam_role.vpc_flow_logs_role.arn
+
+  tags = {
+    Name = "VPC-Flow-Logs"
+  }
+}
